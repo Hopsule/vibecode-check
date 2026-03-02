@@ -8,16 +8,19 @@ const CATEGORY_WEIGHT: Record<Category, number> = {
 };
 
 const LABELS: [number, string, string][] = [
-  [95, 'Pristine', 'Your code is mass'],
-  [85, 'Excellent', 'Very clean codebase'],
-  [70, 'Solid', 'Some issues to address'],
+  [90, 'Pristine', 'Your code is in great shape'],
+  [80, 'Excellent', 'Very clean codebase'],
+  [65, 'Solid', 'Some issues to address'],
   [50, 'Needs Work', 'Significant improvements needed'],
-  [25, 'Rough', 'Major issues detected'],
+  [30, 'Rough', 'Major issues detected'],
   [0, 'Critical', 'Immediate attention required'],
 ];
 
 const ERROR_PENALTY = 5;
 const WARNING_PENALTY = 1;
+
+/** Score scale: effective penalty per file × this ≈ points deducted. ~1 issue/file → ~15 pts, ~3 → ~36 pts */
+const PENALTY_PER_FILE_SCALE = 12;
 
 function getWeights(
   overrides?: Partial<Record<Category, number>>
@@ -38,14 +41,29 @@ function weightedPenalty(
   return sum;
 }
 
+/**
+ * Normalized score 0–100 for a set of diagnostics.
+ * Uses penalty per file (by totalFiles) so large codebases aren't unfairly crushed.
+ */
+function normalizedScore(
+  penalty: number,
+  totalFiles: number
+): number {
+  if (totalFiles <= 0) return 100;
+  const effectivePenalty = penalty / totalFiles;
+  const deduction = effectivePenalty * PENALTY_PER_FILE_SCALE;
+  return Math.max(0, Math.min(100, Math.round(100 - deduction)));
+}
+
 function categoryScore(
   diagnostics: Diagnostic[],
   category: Category,
-  weights: Record<Category, number>
+  weights: Record<Category, number>,
+  totalFiles: number
 ): number {
   const inCategory = diagnostics.filter((d) => d.category === category);
   const penalty = weightedPenalty(inCategory, weights);
-  return Math.max(0, Math.min(100, Math.round(100 - penalty)));
+  return normalizedScore(penalty, totalFiles);
 }
 
 export interface ComputeScoreOptions {
@@ -62,15 +80,8 @@ export function computeScore(
   const warnings = diagnostics.filter((d) => d.severity === 'warning').length;
   const affectedFiles = new Set(diagnostics.map((d) => d.filePath)).size;
 
-  let penalty = weightedPenalty(diagnostics, weights);
-
-  // File-based normalization: more affected files = proportionally worse impact
-  if (totalFiles > 0 && affectedFiles > 0) {
-    const fileFactor = 1 + Math.log10(affectedFiles / totalFiles + 0.01);
-    penalty *= Math.max(0.5, Math.min(2, fileFactor));
-  }
-
-  const score = Math.max(0, Math.min(100, Math.round(100 - penalty)));
+  const penalty = weightedPenalty(diagnostics, weights);
+  const score = normalizedScore(penalty, Math.max(1, totalFiles));
 
   let label = 'Critical';
   let labelDescription = 'Immediate attention required';
@@ -100,7 +111,7 @@ export function computeScore(
   ];
   const scoreByCategory = {} as Record<Category, number>;
   for (const cat of categories) {
-    scoreByCategory[cat] = categoryScore(diagnostics, cat, weights);
+    scoreByCategory[cat] = categoryScore(diagnostics, cat, weights, Math.max(1, totalFiles));
   }
 
   return {
