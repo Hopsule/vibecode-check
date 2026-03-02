@@ -1,0 +1,75 @@
+# Example: Post vibechecker score as a PR comment.
+# Use this in your repo by adding a step that runs vibechecker and posts --ci-comment output.
+#
+# In your repo:
+# 1. Add a job that runs on pull_request.
+# 2. Run: npx vibechecker . --ci-comment > comment.md (use continue-on-error: true if you don't want to fail the build).
+# 3. Use actions/github-script to create or update a comment with the contents of comment.md.
+
+name: vibechecker PR comment
+
+on:
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  vibechecker-comment:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Run vibechecker and capture CI comment
+        id: vibechecker
+        run: |
+          node dist/cli.js . --ci-comment > comment.md 2>&1 || true
+          echo "comment<<EOF" >> $GITHUB_STEP_SUMMARY
+          cat comment.md >> $GITHUB_STEP_SUMMARY
+          echo "EOF" >> $GITHUB_STEP_SUMMARY
+        continue-on-error: true
+
+      - name: Comment PR with vibechecker result
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let body = '';
+            try {
+              body = fs.readFileSync('comment.md', 'utf8');
+            } catch (e) {
+              body = 'vibechecker could not run (e.g. no JS/TS files).';
+            }
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const botComment = comments.find(c => c.user.type === 'Bot' && c.body.includes('## vibechecker'));
+            body = body + '\n\n---\n*Powered by [vibechecker](https://github.com/Hopsule/vibechecker)*';
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
