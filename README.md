@@ -17,11 +17,7 @@ npx @hopsule/vibechecker .
 
 That's it. Framework is detected from your `package.json`; no config required.
 
-**If you use `@hopsule` → GitHub Packages** and get 401, add this to your project (or global) `.npmrc` so this package is always fetched from npm:
-
-```ini
-@hopsule/vibechecker:registry=https://registry.npmjs.org/
-```
+**401 from GitHub Packages?** This package is public. Remove the `//npm.pkg.github.com/:_authToken=...` line from your `.npmrc` (keep `@hopsule:registry=https://npm.pkg.github.com`). Public packages don't need a token; an invalid one causes 401.
 
 ```bash
 # Apply safe fixes automatically
