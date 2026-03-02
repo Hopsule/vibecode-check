@@ -197,6 +197,7 @@ program
       return;
     }
 
+    const durationMs = Math.round(performance.now() - startTime);
     let version: string | undefined;
     try {
       const pkg = require(path.join(__dirname, '..', 'package.json'));

@@ -1,6 +1,6 @@
 {
   "name": "vibecode-check",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Your React code's health check-up. One command. Zero config. Actually fixes your code.",
   "bin": {
     "vibecode-check": "dist/cli.js"
